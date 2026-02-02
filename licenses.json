@@ -1,10 +1,12 @@
 {
   "FishingSystem": {
-    "138011843440791": {
+    "LIC-FISH-001": {
+      "placeId": 138011843440791,
       "active": true,
       "owner": "marbmellow"
     },
-    "987654321": {
+    "LIC-FISH-002": {
+      "placeId": 987654321,
       "active": true,
       "owner": "BuyerB"
     }
