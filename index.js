@@ -1,87 +1,50 @@
 const express = require("express");
-const crypto = require("crypto");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
-// ================================
-// CONFIG
-// ================================
 const PORT = process.env.PORT || 3000;
+const API_SECRET = "CHANGE_THIS_SECRET";
 
-// In-memory license store (FREE OPTION)
-// ⚠️ resets if server restarts
+// TEMP license storage
 const licenses = {
-  "ABC-123-DEF": {
-    userId: null,   // locked Roblox UserId
-    active: true
+  "ABC-123-XYZ": {
+    userId: null,
+    expires: "2026-01-01"
   }
 };
 
-// ================================
-// ROOT ROUTE (health check)
-// ================================
+// ✅ ROOT ROUTE (fixes Cannot GET /)
 app.get("/", (req, res) => {
   res.send("License server is running");
 });
 
-// ================================
-// LICENSE VERIFY ROUTE
-// Roblox calls this
-// ================================
-app.get("/verify", (req, res) => {
-  const { key, userId } = req.query;
+// ✅ LICENSE VERIFY ROUTE
+app.post("/verify", (req, res) => {
+  const { license, userId, placeId, secret } = req.body;
 
-  if (!key || !userId) {
-    return res.status(400).json({
-      success: false,
-      message: "Missing key or userId"
-    });
+  if (secret !== API_SECRET) {
+    return res.json({ valid: false, reason: "Unauthorized" });
   }
 
-  const license = licenses[key];
-
-  if (!license) {
-    return res.status(403).json({
-      success: false,
-      message: "Invalid license key"
-    });
+  const data = licenses[license];
+  if (!data) {
+    return res.json({ valid: false, reason: "Invalid license" });
   }
 
-  if (!license.active) {
-    return res.status(403).json({
-      success: false,
-      message: "License disabled"
-    });
+  // Bind on first use
+  if (!data.userId) {
+    data.userId = userId;
   }
 
-  // First use → lock to UserId
-  if (license.userId === null) {
-    license.userId = userId;
-    return res.json({
-      success: true,
-      message: "License activated"
-    });
+  if (data.userId !== userId) {
+    return res.json({ valid: false, reason: "License already bound" });
   }
 
-  // Already locked → check UserId
-  if (license.userId !== userId) {
-    return res.status(403).json({
-      success: false,
-      message: "License already in use"
-    });
-  }
-
-  // Valid
-  return res.json({
-    success: true,
-    message: "License valid"
-  });
+  return res.json({ valid: true });
 });
 
-// ================================
-// START SERVER
-// ================================
 app.listen(PORT, () => {
   console.log(`License server running on port ${PORT}`);
 });
