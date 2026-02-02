@@ -1,50 +1,95 @@
 const express = require("express");
-const bodyParser = require("body-parser");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const API_SECRET = "CHANGE_THIS_SECRET";
 
-// TEMP license storage
-const licenses = {
+/*
+LICENSE FILE FORMAT (licenses.json)
+
+{
   "ABC-123-XYZ": {
-    userId: null,
-    expires: "2026-01-01"
+    "placeId": 123456789,
+    "active": true
   }
-};
+}
+*/
 
-// ✅ ROOT ROUTE (fixes Cannot GET /)
+const LICENSE_FILE = path.join(__dirname, "licenses.json");
+
+// --------------------
+// HELPERS
+// --------------------
+function loadLicenses() {
+	if (!fs.existsSync(LICENSE_FILE)) {
+		return {};
+	}
+	return JSON.parse(fs.readFileSync(LICENSE_FILE, "utf8"));
+}
+
+function saveLicenses(data) {
+	fs.writeFileSync(LICENSE_FILE, JSON.stringify(data, null, 2));
+}
+
+// --------------------
+// ROOT ROUTE (FIXES Cannot GET /)
+// --------------------
 app.get("/", (req, res) => {
-  res.send("License server is running");
+	res.send("License server is running.");
 });
 
-// ✅ LICENSE VERIFY ROUTE
+// --------------------
+// LICENSE VERIFY ROUTE
+// --------------------
 app.post("/verify", (req, res) => {
-  const { license, userId, placeId, secret } = req.body;
+	const { licenseKey, placeId } = req.body;
 
-  if (secret !== API_SECRET) {
-    return res.json({ valid: false, reason: "Unauthorized" });
-  }
+	if (!licenseKey || !placeId) {
+		return res.status(400).json({
+			valid: false,
+			reason: "Missing licenseKey or placeId"
+		});
+	}
 
-  const data = licenses[license];
-  if (!data) {
-    return res.json({ valid: false, reason: "Invalid license" });
-  }
+	const licenses = loadLicenses();
+	const entry = licenses[licenseKey];
 
-  // Bind on first use
-  if (!data.userId) {
-    data.userId = userId;
-  }
+	// License does not exist
+	if (!entry) {
+		return res.json({
+			valid: false,
+			reason: "License not found"
+		});
+	}
 
-  if (data.userId !== userId) {
-    return res.json({ valid: false, reason: "License already bound" });
-  }
+	// Disabled license
+	if (entry.active !== true) {
+		return res.json({
+			valid: false,
+			reason: "License inactive"
+		});
+	}
 
-  return res.json({ valid: true });
+	// Locked to another game
+	if (entry.placeId !== placeId) {
+		return res.json({
+			valid: false,
+			reason: "License not valid for this PlaceId"
+		});
+	}
+
+	// SUCCESS
+	return res.json({
+		valid: true
+	});
 });
 
+// --------------------
+// START SERVER
+// --------------------
 app.listen(PORT, () => {
-  console.log(`License server running on port ${PORT}`);
+	console.log(`License server running on port ${PORT}`);
 });
